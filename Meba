@@ -2,48 +2,48 @@ import pygame
 import numpy as np
 import sys
 
-# Инициализация
+
 pygame.init()
 width, height = 1000, 700
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Мёбиус")
 font = pygame.font.SysFont('Arial', 14)
 
-# Цвета
+
 BG_COLOR = (10, 10, 10)
 WHITE = (255, 255, 255)
 FACE_COLOR = (255, 255, 255, 60)  # прозрачный белый
 POINT_COLOR = (255, 255, 255)
 AXIS_COLORS = {'X': (255, 0, 0), 'Y': (0, 255, 0), 'Z': (0, 128, 255)}
 
-# Параметры сетки
+
 n_u = 80
 n_v = 20
 u_vals = np.linspace(0, 2 * np.pi, n_u)
 v_vals = np.linspace(-1, 1, n_v)
 
-# Камера
+
 scale = 200
 camera_distance = 2.0
 rot_x = 0
 rot_y = 0
-view_mode = 2  # 1=каркас, 2=прозрачный, 3=затенение
+view_mode = 2  
 
-# Мышь
+
 is_dragging = False
 last_mouse_pos = None
 
-# Освещение
-light_dir = np.array([0, 0, -1])  # фронтальный свет
 
-# Поверхность Мёбиуса
+light_dir = np.array([0, 0, -1])  
+
+
 def mobius(u, v):
     x = (1 + 0.5 * v * np.cos(u / 2)) * np.cos(u)
     y = (1 + 0.5 * v * np.cos(u / 2)) * np.sin(u)
     z = 0.5 * v * np.sin(u / 2)
     return np.array([x, y, z])
 
-# Вращение
+
 def rotate(point, ax, ay):
     x, y, z = point
     cos_x, sin_x = np.cos(ax), np.sin(ax)
@@ -54,7 +54,7 @@ def rotate(point, ax, ay):
 
     return np.array([x, y, z])
 
-# Проекция
+
 def project(point3d):
     x, y, z = point3d
     z += camera_distance
@@ -64,7 +64,7 @@ def project(point3d):
     y2d = int(height / 2 - y * factor)
     return (x2d, y2d), z
 
-# Затенение
+
 def get_shaded_color(p1, p2, p3, base_color):
     v1 = p2 - p1
     v2 = p3 - p1
@@ -75,7 +75,7 @@ def get_shaded_color(p1, p2, p3, base_color):
     c = int(base_color[0] * brightness)
     return (c, c, c, base_color[3])
 
-# Сборка полигонов
+
 def build_polygons():
     polygons = []
     for i in range(n_u - 1):
@@ -92,7 +92,7 @@ def build_polygons():
             polygons.append(poly3d)
     return polygons
 
-# Отрисовка
+
 def draw(polygons):
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
     projected_polygons = []
@@ -117,13 +117,13 @@ def draw(polygons):
             pygame.draw.polygon(surface, shaded_color, poly2d)
             pygame.draw.polygon(surface, WHITE, poly2d, 1)
 
-        # Точки (вершины)
+        
         for pt in poly2d:
             pygame.draw.circle(surface, POINT_COLOR, pt, 2)
 
     screen.blit(surface, (0, 0))
 
-# Отрисовка осей
+
 def draw_axes():
     axes = {
         'X': np.array([1.5, 0, 0]),
@@ -139,11 +139,11 @@ def draw_axes():
         text = font.render(label, True, AXIS_COLORS[label])
         screen.blit(text, end_proj)
 
-# Построение
+
 polygons = build_polygons()
 clock = pygame.time.Clock()
 
-# Цикл
+
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
