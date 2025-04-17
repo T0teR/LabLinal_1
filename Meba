@@ -1,0 +1,183 @@
+import pygame
+import numpy as np
+import sys
+
+# Инициализация
+pygame.init()
+width, height = 1000, 700
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption("Мёбиус")
+font = pygame.font.SysFont('Arial', 14)
+
+# Цвета
+BG_COLOR = (10, 10, 10)
+WHITE = (255, 255, 255)
+FACE_COLOR = (255, 255, 255, 60)  # прозрачный белый
+POINT_COLOR = (255, 255, 255)
+AXIS_COLORS = {'X': (255, 0, 0), 'Y': (0, 255, 0), 'Z': (0, 128, 255)}
+
+# Параметры сетки
+n_u = 80
+n_v = 20
+u_vals = np.linspace(0, 2 * np.pi, n_u)
+v_vals = np.linspace(-1, 1, n_v)
+
+# Камера
+scale = 200
+camera_distance = 2.0
+rot_x = 0
+rot_y = 0
+view_mode = 2  # 1=каркас, 2=прозрачный, 3=затенение
+
+# Мышь
+is_dragging = False
+last_mouse_pos = None
+
+# Освещение
+light_dir = np.array([0, 0, -1])  # фронтальный свет
+
+# Поверхность Мёбиуса
+def mobius(u, v):
+    x = (1 + 0.5 * v * np.cos(u / 2)) * np.cos(u)
+    y = (1 + 0.5 * v * np.cos(u / 2)) * np.sin(u)
+    z = 0.5 * v * np.sin(u / 2)
+    return np.array([x, y, z])
+
+# Вращение
+def rotate(point, ax, ay):
+    x, y, z = point
+    cos_x, sin_x = np.cos(ax), np.sin(ax)
+    cos_y, sin_y = np.cos(ay), np.sin(ay)
+
+    y, z = y * cos_x - z * sin_x, y * sin_x + z * cos_x
+    x, z = x * cos_y + z * sin_y, -x * sin_y + z * cos_y
+
+    return np.array([x, y, z])
+
+# Проекция
+def project(point3d):
+    x, y, z = point3d
+    z += camera_distance
+    if z == 0: z = 0.001
+    factor = scale / z
+    x2d = int(width / 2 + x * factor)
+    y2d = int(height / 2 - y * factor)
+    return (x2d, y2d), z
+
+# Затенение
+def get_shaded_color(p1, p2, p3, base_color):
+    v1 = p2 - p1
+    v2 = p3 - p1
+    normal = np.cross(v1, v2)
+    normal = normal / np.linalg.norm(normal)
+    brightness = np.dot(normal, light_dir)
+    brightness = max(0, min(1, brightness))
+    c = int(base_color[0] * brightness)
+    return (c, c, c, base_color[3])
+
+# Сборка полигонов
+def build_polygons():
+    polygons = []
+    for i in range(n_u - 1):
+        for j in range(n_v - 1):
+            u1, u2 = u_vals[i], u_vals[i + 1]
+            v1, v2 = v_vals[j], v_vals[j + 1]
+
+            p1 = mobius(u1, v1)
+            p2 = mobius(u2, v1)
+            p3 = mobius(u2, v2)
+            p4 = mobius(u1, v2)
+
+            poly3d = [p1, p2, p3, p4]
+            polygons.append(poly3d)
+    return polygons
+
+# Отрисовка
+def draw(polygons):
+    surface = pygame.Surface((width, height), pygame.SRCALPHA)
+    projected_polygons = []
+
+    for poly in polygons:
+        rotated = [rotate(p, rot_x, rot_y) for p in poly]
+        projected = [project(p) for p in rotated]
+        screen_coords = [pt for pt, _ in projected]
+        avg_depth = sum(z for _, z in projected) / 4
+        projected_polygons.append((avg_depth, screen_coords, rotated))
+
+    projected_polygons.sort(reverse=True, key=lambda item: item[0])
+
+    for _, poly2d, poly3d in projected_polygons:
+        if view_mode == 1:
+            pygame.draw.polygon(surface, WHITE, poly2d, 1)
+        elif view_mode == 2:
+            pygame.draw.polygon(surface, FACE_COLOR, poly2d)
+            pygame.draw.polygon(surface, WHITE, poly2d, 1)
+        elif view_mode == 3:
+            shaded_color = get_shaded_color(poly3d[0], poly3d[1], poly3d[2], FACE_COLOR)
+            pygame.draw.polygon(surface, shaded_color, poly2d)
+            pygame.draw.polygon(surface, WHITE, poly2d, 1)
+
+        # Точки (вершины)
+        for pt in poly2d:
+            pygame.draw.circle(surface, POINT_COLOR, pt, 2)
+
+    screen.blit(surface, (0, 0))
+
+# Отрисовка осей
+def draw_axes():
+    axes = {
+        'X': np.array([1.5, 0, 0]),
+        'Y': np.array([0, 1.5, 0]),
+        'Z': np.array([0, 0, 1.5]),
+    }
+    origin = np.array([0, 0, 0])
+    origin_proj, _ = project(rotate(origin, rot_x, rot_y))
+
+    for label, vec in axes.items():
+        end_proj, _ = project(rotate(vec, rot_x, rot_y))
+        pygame.draw.line(screen, AXIS_COLORS[label], origin_proj, end_proj, 2)
+        text = font.render(label, True, AXIS_COLORS[label])
+        screen.blit(text, end_proj)
+
+# Построение
+polygons = build_polygons()
+clock = pygame.time.Clock()
+
+# Цикл
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+        elif event.type == pygame.MOUSEWHEEL:
+            scale *= 1.1 if event.y > 0 else 0.9
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                is_dragging = True
+                last_mouse_pos = event.pos
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                is_dragging = False
+
+        elif event.type == pygame.MOUSEMOTION:
+            if is_dragging:
+                dx, dy = event.pos[0] - last_mouse_pos[0], event.pos[1] - last_mouse_pos[1]
+                rot_y += dx * 0.01
+                rot_x += dy * 0.01
+                last_mouse_pos = event.pos
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_1:
+                view_mode = 1
+            elif event.key == pygame.K_2:
+                view_mode = 2
+            elif event.key == pygame.K_3:
+                view_mode = 3
+
+    screen.fill(BG_COLOR)
+    draw(polygons)
+    draw_axes()
+    pygame.display.flip()
+    clock.tick(60)
